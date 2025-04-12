@@ -3,7 +3,7 @@
 --
 -- == Capabilities
 --
--- By capabilities we mean classes empowering a context with functionality.
+-- Classes empowering a context with functionality.
 --
 -- E.g., with the help of the 'RunsStatement' typeclass 'Statement.Statement' can be executed in 'Session', 'Pipeline' and 'Transaction'.
 --
@@ -13,47 +13,6 @@
 --
 -- This library also provides a typeclass 'IsStatementParams' supporting a modularisation pattern, where you define everything related to one statement in an isolated module.
 -- This pattern leads to high code cohesion and low coupling.
---
--- === __Example of such a module__
---
--- > module MusicCatalogueDb.Statements.SelectArtistIdsByName where
--- >
--- > import Data.Functor.Contravariant
--- > import Data.Text (Text)
--- > import Data.UUID (UUID)
--- > import Data.Vector (Vector)
--- > import qualified Hasql.Decoders as Decoders
--- > import qualified Hasql.Encoders as Encoders
--- > import HasqlDev
--- > import Prelude
--- >
--- > data SelectArtistIdsByNameParams = SelectArtistIdsByNameParams
--- >   { name :: Text
--- >   }
--- >
--- > type SelectArtistIdsByNameResult = Vector SelectArtistIdsByNameResultRow
--- >
--- > data SelectArtistIdsByNameResultRow = SelectArtistIdsByNameResultRow
--- >   { id :: UUID
--- >   }
--- >
--- > instance IsStatementParams SelectArtistIdsByNameParams where
--- >   type StatementResultByParams SelectArtistIdsByNameParams = SelectArtistIdsByNameResult
--- >   statementByParams =
--- >     Statement sql encoder decoder canBePrepared
--- >     where
--- >       sql = "select id from artist where name = $1 limit 1"
--- >       encoder =
--- >         mconcat
--- >           [ (\(SelectArtistIdsByNameParams x) -> x)
--- >               >$< Encoders.param (Encoders.nonNullable Encoders.text)
--- >           ]
--- >       decoder =
--- >         Decoders.rowVector
--- >           ( SelectArtistIdsByNameResultRow
--- >               <$> Decoders.column (Decoders.nonNullable Decoders.uuid)
--- >           )
--- >       canBePrepared = True
 module HasqlDev
   ( -- * Connection Pool
     Pool.Pool,
@@ -162,7 +121,51 @@ instance RunsPlainSql Session.Session where
   runPlainSql = Session.sql
 
 -- |
--- Data structure modeling the statement parameters and determining the statement and its result type.
+-- Evidence that a data-structure models statement parameters determining the statement and its result type.
+--
+-- Supports a modularisation pattern, where you define everything related to one statement in an isolated module.
+-- This pattern leads to high code cohesion and low coupling.
+--
+-- ==== __Example of such a module__
+--
+-- > module MusicCatalogueDb.Statements.SelectArtistIdsByName where
+-- >
+-- > import Data.Functor.Contravariant
+-- > import Data.Text (Text)
+-- > import Data.UUID (UUID)
+-- > import Data.Vector (Vector)
+-- > import qualified Hasql.Decoders as Decoders
+-- > import qualified Hasql.Encoders as Encoders
+-- > import HasqlDev
+-- > import Prelude
+-- >
+-- > data SelectArtistIdsByNameParams = SelectArtistIdsByNameParams
+-- >   { name :: Text
+-- >   }
+-- >
+-- > type SelectArtistIdsByNameResult = Vector SelectArtistIdsByNameResultRow
+-- >
+-- > data SelectArtistIdsByNameResultRow = SelectArtistIdsByNameResultRow
+-- >   { id :: UUID
+-- >   }
+-- >
+-- > instance IsStatementParams SelectArtistIdsByNameParams where
+-- >   type StatementResultByParams SelectArtistIdsByNameParams = SelectArtistIdsByNameResult
+-- >   statementByParams =
+-- >     Statement sql encoder decoder canBePrepared
+-- >     where
+-- >       sql = "select id from artist where name = $1 limit 1"
+-- >       encoder =
+-- >         mconcat
+-- >           [ (\(SelectArtistIdsByNameParams x) -> x)
+-- >               >$< Encoders.param (Encoders.nonNullable Encoders.text)
+-- >           ]
+-- >       decoder =
+-- >         Decoders.rowVector
+-- >           ( SelectArtistIdsByNameResultRow
+-- >               <$> Decoders.column (Decoders.nonNullable Decoders.uuid)
+-- >           )
+-- >       canBePrepared = True
 class IsStatementParams a where
   -- | The result type of a statement determined by its parameters.
   type StatementResultByParams a
