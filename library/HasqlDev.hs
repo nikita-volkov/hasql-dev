@@ -44,7 +44,7 @@ module HasqlDev
     RunsTransaction (..),
 
     -- * Non-parameterized SQL
-    RunsPlainSql (..),
+    RunsScript (..),
 
     -- * Parametric statements
     Statement.Statement (..),
@@ -114,10 +114,10 @@ instance RunsTransaction Session.Session where
           else Transaction.Sessions.Read
 
 -- | Capability of a functor to execute unparameterized and possibly multistatement SQL-queries.
-class (Functor f) => RunsPlainSql f where
+class (Functor f) => RunsScript f where
   runScript :: Text -> f ()
 
-instance RunsPlainSql Session.Session where
+instance RunsScript Session.Session where
   runScript = Session.script
 
 -- |
