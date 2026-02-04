@@ -22,11 +22,7 @@ module HasqlDev
 
     -- * Errors
     Pool.UsageError (..),
-    Connection.ConnectionError,
-    Session.SessionError (..),
-    Session.CommandError (..),
-    Session.ResultError (..),
-    Session.RowError (..),
+    module Hasql.Errors,
 
     -- * Session
     Session.Session,
@@ -63,6 +59,7 @@ module HasqlDev
 where
 
 import qualified Hasql.Connection as Connection
+import Hasql.Errors
 import qualified Hasql.Pipeline as Pipeline
 import qualified Hasql.Pool as Pool
 import qualified Hasql.Session as Session
@@ -80,8 +77,11 @@ class (Functor f) => RunsSession f where
 instance RunsSession Session.Session where
   runSession = id
 
-instance RunsSession (ReaderT Connection.Connection (ExceptT Session.SessionError IO)) where
-  runSession session = ReaderT \connection -> ExceptT (Session.run session connection)
+instance RunsSession (ReaderT Connection.Connection (ExceptT SessionError IO)) where
+  runSession session = ReaderT \connection -> ExceptT (Connection.use connection session)
+
+instance RunsSession (ReaderT Pool.Pool (ExceptT Pool.UsageError IO)) where
+  runSession session = ReaderT \pool -> ExceptT (Pool.use pool session)
 
 -- | Capability of a functor to execute pipelines.
 class (Functor f) => RunsPipeline f where
@@ -115,10 +115,10 @@ instance RunsTransaction Session.Session where
 
 -- | Capability of a functor to execute unparameterized and possibly multistatement SQL-queries.
 class (Functor f) => RunsPlainSql f where
-  runPlainSql :: ByteString -> f ()
+  runScript :: Text -> f ()
 
 instance RunsPlainSql Session.Session where
-  runPlainSql = Session.sql
+  runScript = Session.script
 
 -- |
 -- Evidence that a data-structure models statement parameters determining the statement and its result type.
