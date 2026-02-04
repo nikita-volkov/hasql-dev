@@ -8,11 +8,6 @@
 -- E.g., with the help of the 'RunsStatement' typeclass 'Statement.Statement' can be executed in 'Session', 'Pipeline' and 'Transaction'.
 --
 -- Besides letting us connect different abstractions of Hasql together it also allows to integrate these functions directly into custom execution contexts like the main application-specific monad.
---
--- == Statement-based Modularisation
---
--- This library also provides a typeclass 'IsStatementParams' supporting a modularisation pattern, where you define everything related to one statement in an isolated module.
--- This pattern leads to high code cohesion and low coupling.
 module HasqlDev
   ( -- * Connection Pool
     Pool.Pool,
@@ -47,19 +42,18 @@ module HasqlDev
     RunsScript (..),
 
     -- * Parametric statements
-    Statement.Statement (..),
+    Statement.Statement,
 
     -- ** Statement execution
     RunsStatement (..),
     runStatementByParams,
-
-    -- ** Implicit statement definition
-    IsStatementParams (..),
   )
 where
 
 import qualified Hasql.Connection as Connection
 import Hasql.Errors
+import qualified Hasql.Mapping as Mapping
+import qualified Hasql.Mapping.IsStatement as Mapping.IsStatement
 import qualified Hasql.Pipeline as Pipeline
 import qualified Hasql.Pool as Pool
 import qualified Hasql.Session as Session
@@ -121,59 +115,6 @@ instance RunsScript Session.Session where
   runScript = Session.script
 
 -- |
--- Evidence that a data-structure models statement parameters determining the statement and its result type.
---
--- Supports a modularisation pattern, where you define everything related to one statement in an isolated module.
--- This pattern leads to high code cohesion and low coupling.
---
--- ==== __Example of such a module__
---
--- > module MusicCatalogueDb.Statements.SelectArtistIdsByName where
--- >
--- > import Data.Functor.Contravariant
--- > import Data.Text (Text)
--- > import Data.UUID (UUID)
--- > import Data.Vector (Vector)
--- > import qualified Hasql.Decoders as Decoders
--- > import qualified Hasql.Encoders as Encoders
--- > import HasqlDev
--- > import Prelude
--- >
--- > data SelectArtistIdsByNameParams = SelectArtistIdsByNameParams
--- >   { name :: Text
--- >   }
--- >
--- > type SelectArtistIdsByNameResult = Vector SelectArtistIdsByNameResultRow
--- >
--- > data SelectArtistIdsByNameResultRow = SelectArtistIdsByNameResultRow
--- >   { id :: UUID
--- >   }
--- >
--- > instance IsStatementParams SelectArtistIdsByNameParams where
--- >   type StatementResultByParams SelectArtistIdsByNameParams = SelectArtistIdsByNameResult
--- >   statementByParams =
--- >     Statement sql encoder decoder canBePrepared
--- >     where
--- >       sql = "select id from artist where name = $1 limit 1"
--- >       encoder =
--- >         mconcat
--- >           [ (\(SelectArtistIdsByNameParams x) -> x)
--- >               >$< Encoders.param (Encoders.nonNullable Encoders.text)
--- >           ]
--- >       decoder =
--- >         Decoders.rowVector
--- >           ( SelectArtistIdsByNameResultRow
--- >               <$> Decoders.column (Decoders.nonNullable Decoders.uuid)
--- >           )
--- >       canBePrepared = True
-class IsStatementParams a where
-  -- | The result type of a statement determined by its parameters.
-  type StatementResultByParams a
-
-  -- | Statement determined by its parameters.
-  statementByParams :: Statement.Statement a (StatementResultByParams a)
-
--- |
 -- Capability of a functor to execute statements.
 class (Functor f) => RunsStatement f where
   -- | Execute a statement in the context of the functor, providing the parameters for it.
@@ -190,5 +131,5 @@ instance RunsStatement Transaction.Transaction where
 
 -- |
 -- Execute a statement implicitly determined by its parameters in a functor that is capable of running statements.
-runStatementByParams :: (RunsStatement f, IsStatementParams a) => a -> f (StatementResultByParams a)
-runStatementByParams params = runStatement statementByParams params
+runStatementByParams :: (RunsStatement f, Mapping.IsStatement params) => params -> f (Mapping.IsStatement.Result params)
+runStatementByParams params = runStatement Mapping.IsStatement.statement params

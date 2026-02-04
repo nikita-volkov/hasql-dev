@@ -84,6 +84,7 @@ library
     base >=4.11 && <5,
     bytestring >=0.10 && <0.14,
     hasql ^>=1.10.1,
+    hasql-mapping,
     hasql-pool ^>=1.4,
     hasql-transaction ^>=1.2.0.1,
     text >=1.2 && <3,
