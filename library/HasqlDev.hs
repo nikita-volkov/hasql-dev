@@ -77,6 +77,18 @@ instance RunsSession (ReaderT Connection.Connection (ExceptT SessionError IO)) w
 instance RunsSession (ReaderT Pool.Pool (ExceptT Pool.UsageError IO)) where
   runSession session = ReaderT \pool -> ExceptT (Pool.use pool session)
 
+instance (RunsSession f) => RunsSession (StateT s f) where
+  runSession session = StateT \s -> fmap (\a -> (a, s)) (runSession session)
+
+instance (RunsSession f) => RunsSession (ReaderT r f) where
+  runSession session = ReaderT \_ -> runSession session
+
+instance (RunsSession f) => RunsSession (ExceptT e f) where
+  runSession session = ExceptT (fmap Right (runSession session))
+
+instance (RunsSession f, Monoid w) => RunsSession (WriterT w f) where
+  runSession session = WriterT (fmap (\a -> (a, mempty)) (runSession session))
+
 -- | Capability of a functor to execute pipelines.
 class (Functor f) => RunsPipeline f where
   -- | Lift a pipeline into the context of the functor.
@@ -87,6 +99,18 @@ instance RunsPipeline Pipeline.Pipeline where
 
 instance RunsPipeline Session.Session where
   runPipeline = Session.pipeline
+
+instance (RunsPipeline f) => RunsPipeline (StateT s f) where
+  runPipeline session = StateT \s -> fmap (\a -> (a, s)) (runPipeline session)
+
+instance (RunsPipeline f) => RunsPipeline (ReaderT r f) where
+  runPipeline session = ReaderT \_ -> runPipeline session
+
+instance (RunsPipeline f) => RunsPipeline (ExceptT e f) where
+  runPipeline session = ExceptT (fmap Right (runPipeline session))
+
+instance (RunsPipeline f, Monoid w) => RunsPipeline (WriterT w f) where
+  runPipeline session = WriterT (fmap (\a -> (a, mempty)) (runPipeline session))
 
 class (Functor f) => RunsTransaction f where
   -- | Lift a transaction into the context of the functor.

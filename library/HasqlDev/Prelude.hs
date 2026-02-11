@@ -18,6 +18,7 @@ import Control.Monad.Trans.Except as Exports (Except, ExceptT (ExceptT), catchE,
 import Control.Monad.Trans.Maybe as Exports hiding (liftListen, liftPass)
 import Control.Monad.Trans.Reader as Exports hiding (liftCallCC, liftCatch)
 import Control.Monad.Trans.State.Strict as Exports hiding (liftCallCC, liftCatch, liftListen, liftPass)
+import Control.Monad.Trans.Writer.Strict as Exports (WriterT (WriterT))
 import Data.Bits as Exports
 import Data.Bool as Exports
 import Data.ByteString as Exports (ByteString)
