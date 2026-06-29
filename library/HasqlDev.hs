@@ -37,10 +37,10 @@ module HasqlDev
     Transaction.Sessions.Mode (..),
 
     -- ** Transaction execution
-    RunsTransaction (..),
+    runTransaction,
 
     -- * Non-parameterized SQL
-    RunsScript (..),
+    runScript,
 
     -- * Parametric statements
     Statement.Statement,
@@ -97,7 +97,7 @@ instance RunsPipeline Session.Session where
   runPipeline = Session.pipeline
 
 -- |
--- Capability of a monad to execute transactions.
+-- Lift a transaction into any context capable of running sessions.
 --
 -- For fixed isolation level and mode, 'runTransaction' is a monad morphism
 -- from 'Transaction.Transaction':
@@ -107,37 +107,25 @@ instance RunsPipeline Session.Session where
 -- runTransaction lvl mode (m '>>=' k) =
 --   runTransaction lvl mode m '>>=' runTransaction lvl mode . k
 -- @
-class (RunsSession f) => RunsTransaction f where
-  -- | Lift a transaction into the context of the monad.
-  runTransaction ::
-    -- | Transaction isolation level.
-    Transaction.Sessions.IsolationLevel ->
-    -- | Transaction mode.
-    Transaction.Sessions.Mode ->
-    Transaction.Transaction a ->
-    f a
-  default runTransaction ::
-    -- | Transaction isolation level.
-    Transaction.Sessions.IsolationLevel ->
-    -- | Transaction mode.
-    Transaction.Sessions.Mode ->
-    Transaction.Transaction a ->
-    f a
-  runTransaction isolationLevel mode transaction =
-    runSession (Transaction.Sessions.transaction isolationLevel mode transaction)
+runTransaction ::
+  (RunsSession f) =>
+  -- | Transaction isolation level.
+  Transaction.Sessions.IsolationLevel ->
+  -- | Transaction mode.
+  Transaction.Sessions.Mode ->
+  Transaction.Transaction a ->
+  f a
+runTransaction isolationLevel mode transaction =
+  runSession (Transaction.Sessions.transaction isolationLevel mode transaction)
 
-instance RunsTransaction Session.Session where
-  runTransaction = Transaction.Sessions.transaction
-
--- | Capability of a monad to execute unparameterized and possibly multistatement SQL-queries.
---
--- Law: @runScript sql = runSession (Session.script sql)@
-class (Monad f) => RunsScript f where
-  -- | Execute an unparameterized and possibly multistatement SQL script in the context of the monad.
-  runScript :: Text -> f ()
-
-instance RunsScript Session.Session where
-  runScript = Session.script
+-- |
+-- Execute an unparameterized and possibly multistatement SQL script in any context capable of running sessions.
+runScript ::
+  (RunsSession f) =>
+  -- | SQL script.
+  Text ->
+  f ()
+runScript sql = runSession (Session.script sql)
 
 -- |
 -- Capability of an applicative functor to execute statements.
