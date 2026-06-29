@@ -51,7 +51,6 @@ module HasqlDev
   )
 where
 
-import qualified Hasql.Connection as Connection
 import Hasql.Errors
 import qualified Hasql.Mapping as Mapping
 import qualified Hasql.Mapping.IsStatement as Mapping.IsStatement
@@ -64,33 +63,29 @@ import qualified Hasql.Transaction.Sessions as Transaction.Sessions
 import HasqlDev.Prelude
 
 -- |
--- Capability of a functor to execute sessions.
+-- Capability of a monad to execute sessions.
+--
+-- 'runSession' is a monad morphism from 'Session.Session':
+--
+-- @
+-- runSession ('pure' a) = 'pure' a
+-- runSession (m '>>=' k) = runSession m '>>=' runSession . k
+-- @
 class (Monad f) => RunsSession f where
-  -- | Lift a session into the context of the functor.
+  -- | Lift a session into the context of the monad.
   runSession :: Session.Session a -> f a
 
 instance RunsSession Session.Session where
   runSession = id
 
-instance RunsSession (ReaderT Connection.Connection (ExceptT SessionError IO)) where
-  runSession session = ReaderT \connection -> ExceptT (Connection.use connection session)
-
-instance RunsSession (ReaderT Pool.Pool (ExceptT Pool.UsageError IO)) where
-  runSession session = ReaderT \pool -> ExceptT (Pool.use pool session)
-
-instance (RunsSession f) => RunsSession (StateT s f) where
-  runSession session = StateT \s -> fmap (\a -> (a, s)) (runSession session)
-
-instance (RunsSession f) => RunsSession (ReaderT r f) where
-  runSession session = ReaderT \_ -> runSession session
-
-instance (RunsSession f) => RunsSession (ExceptT e f) where
-  runSession session = ExceptT (fmap Right (runSession session))
-
-instance (RunsSession f, Monoid w) => RunsSession (WriterT w f) where
-  runSession session = WriterT (fmap (\a -> (a, mempty)) (runSession session))
-
--- | Capability of a functor to execute pipelines.
+-- | Capability of an applicative functor to execute pipelines.
+--
+-- 'runPipeline' is an applicative morphism from 'Pipeline.Pipeline':
+--
+-- @
+-- runPipeline ('pure' a) = 'pure' a
+-- runPipeline (pf '<*>' px) = runPipeline pf '<*>' runPipeline px
+-- @
 class (Applicative f) => RunsPipeline f where
   -- | Lift a pipeline into the context of the functor.
   runPipeline :: Pipeline.Pipeline a -> f a
@@ -101,20 +96,19 @@ instance RunsPipeline Pipeline.Pipeline where
 instance RunsPipeline Session.Session where
   runPipeline = Session.pipeline
 
-instance (Monad f, RunsPipeline f) => RunsPipeline (StateT s f) where
-  runPipeline pipeline = StateT \s -> fmap (\a -> (a, s)) (runPipeline pipeline)
-
-instance (Monad f, RunsPipeline f) => RunsPipeline (ReaderT r f) where
-  runPipeline pipeline = ReaderT \_ -> runPipeline pipeline
-
-instance (Monad f, RunsPipeline f) => RunsPipeline (ExceptT e f) where
-  runPipeline pipeline = ExceptT (fmap Right (runPipeline pipeline))
-
-instance (Monad f, RunsPipeline f, Monoid w) => RunsPipeline (WriterT w f) where
-  runPipeline pipeline = WriterT (fmap (\a -> (a, mempty)) (runPipeline pipeline))
-
-class (Monad f) => RunsTransaction f where
-  -- | Lift a transaction into the context of the functor.
+-- |
+-- Capability of a monad to execute transactions.
+--
+-- For fixed isolation level and mode, 'runTransaction' is a monad morphism
+-- from 'Transaction.Transaction':
+--
+-- @
+-- runTransaction lvl mode ('pure' a) = 'pure' a
+-- runTransaction lvl mode (m '>>=' k) =
+--   runTransaction lvl mode m '>>=' runTransaction lvl mode . k
+-- @
+class (RunsSession f) => RunsTransaction f where
+  -- | Lift a transaction into the context of the monad.
   runTransaction ::
     -- | Transaction isolation level.
     Transaction.Sessions.IsolationLevel ->
@@ -122,48 +116,39 @@ class (Monad f) => RunsTransaction f where
     Transaction.Sessions.Mode ->
     Transaction.Transaction a ->
     f a
+  default runTransaction ::
+    -- | Transaction isolation level.
+    Transaction.Sessions.IsolationLevel ->
+    -- | Transaction mode.
+    Transaction.Sessions.Mode ->
+    Transaction.Transaction a ->
+    f a
+  runTransaction isolationLevel mode transaction =
+    runSession (Transaction.Sessions.transaction isolationLevel mode transaction)
 
 instance RunsTransaction Session.Session where
   runTransaction = Transaction.Sessions.transaction
 
-instance (RunsTransaction f) => RunsTransaction (StateT s f) where
-  runTransaction isolationLevel mode transaction =
-    StateT \s -> fmap (\a -> (a, s)) (runTransaction isolationLevel mode transaction)
-
-instance (RunsTransaction f) => RunsTransaction (ReaderT r f) where
-  runTransaction isolationLevel mode transaction =
-    ReaderT \_ -> runTransaction isolationLevel mode transaction
-
-instance (RunsTransaction f) => RunsTransaction (ExceptT e f) where
-  runTransaction isolationLevel mode transaction =
-    ExceptT (fmap Right (runTransaction isolationLevel mode transaction))
-
-instance (RunsTransaction f, Monoid w) => RunsTransaction (WriterT w f) where
-  runTransaction isolationLevel mode transaction =
-    WriterT (fmap (\a -> (a, mempty)) (runTransaction isolationLevel mode transaction))
-
--- | Capability of a functor to execute unparameterized and possibly multistatement SQL-queries.
+-- | Capability of a monad to execute unparameterized and possibly multistatement SQL-queries.
+--
+-- Law: @runScript sql = runSession (Session.script sql)@
 class (Monad f) => RunsScript f where
-  -- | Execute an unparameterized and possibly multistatement SQL script in the context of the functor.
+  -- | Execute an unparameterized and possibly multistatement SQL script in the context of the monad.
   runScript :: Text -> f ()
 
 instance RunsScript Session.Session where
   runScript = Session.script
 
-instance (RunsScript f) => RunsScript (StateT s f) where
-  runScript sql = StateT \s -> fmap (\a -> (a, s)) (runScript sql)
-
-instance (RunsScript f) => RunsScript (ReaderT r f) where
-  runScript sql = ReaderT \_ -> runScript sql
-
-instance (RunsScript f) => RunsScript (ExceptT e f) where
-  runScript sql = ExceptT (fmap Right (runScript sql))
-
-instance (RunsScript f, Monoid w) => RunsScript (WriterT w f) where
-  runScript sql = WriterT (fmap (\a -> (a, mempty)) (runScript sql))
-
 -- |
--- Capability of a functor to execute statements.
+-- Capability of an applicative functor to execute statements.
+--
+-- When the functor is also an instance of 'RunsSession' or 'RunsPipeline',
+-- 'runStatement' should be consistent with them:
+--
+-- @
+-- runStatement stmt params = runSession (Session.statement params stmt)
+-- runStatement stmt params = runPipeline (Pipeline.statement params stmt)
+-- @
 class (Applicative f) => RunsStatement f where
   -- | Execute a statement in the context of the functor, providing the parameters for it.
   runStatement :: Statement.Statement a b -> a -> f b
@@ -176,18 +161,6 @@ instance RunsStatement Session.Session where
 
 instance RunsStatement Transaction.Transaction where
   runStatement = flip Transaction.statement
-
-instance (Monad f, RunsStatement f) => RunsStatement (StateT s f) where
-  runStatement statement params = StateT \s -> fmap (\a -> (a, s)) (runStatement statement params)
-
-instance (Monad f, RunsStatement f) => RunsStatement (ReaderT r f) where
-  runStatement statement params = ReaderT \_ -> runStatement statement params
-
-instance (Monad f, RunsStatement f) => RunsStatement (ExceptT e f) where
-  runStatement statement params = ExceptT (fmap Right (runStatement statement params))
-
-instance (Monad f, RunsStatement f, Monoid w) => RunsStatement (WriterT w f) where
-  runStatement statement params = WriterT (fmap (\a -> (a, mempty)) (runStatement statement params))
 
 -- |
 -- Execute a statement implicitly determined by its parameters in a functor that is capable of running statements.
