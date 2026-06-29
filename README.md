@@ -1,63 +1,23 @@
 
 ```mermaid
-classDiagram
-    class Pool {
-        +Manages multiple Connections
-        +Settings for size, timeout
-        +acquire() Connection
-        +use(Session) Either SessionError a
-    }
+flowchart TD
+    Pool["<b>Pool</b><br/>Manages a set of Connections<br/>with size and timeout settings"]
+    Connection["<b>Connection</b><br/>A live link to PostgreSQL"]
+    Session["<b>Session</b><br/>Monadic context for running<br/>queries serially"]
+    Transaction["<b>Transaction</b><br/>An isolated unit of work<br/>with a configurable isolation mode"]
+    Pipeline["<b>Pipeline</b><br/>Applicative context for parallel<br/>execution of queries using a single connection"]
+    Statement["<b>Statement</b><br/>A parameterised SQL template<br/>with an encoder and a decoder"]
+    Encoders["<b>Encoders</b><br/>Map Haskell values<br/>to PostgreSQL parameters"]
+    Decoders["<b>Decoders</b><br/>Map PostgreSQL results<br/>to Haskell values"]
 
-    class Connection {
-        +Represents PostgreSQL database link
-        +Managed internally by Hasql
-    }
-
-    class Session {
-        +Monadic context
-        +run(Connection) Either SessionError a
-        +statement(params, Statement) result
-        +pipeline(Pipeline) result
-        +sql(ByteString) ()
-        +transaction(Transaction) result
-    }
-
-    class Transaction {
-        +Isolated database operation
-        +Modes: ReadCommitted, RepeatableRead, Serializable
-        +statement(params, Statement) result
-    }
-
-    class Pipeline {
-        +Batches multiple Statements
-        +Efficient execution in fewer roundtrips
-    }
-
-    class Statement {
-        +SQL template (ByteString)
-        +Params encoder
-        +Result decoder
-        +Preparation flag (Bool)
-    }
-
-    class Encoders {
-        +Maps Haskell types to PostgreSQL params
-        +e.g., param int8
-    }
-
-    class Decoders {
-        +Maps PostgreSQL results to Haskell types
-        +e.g., singleRow value int8
-    }
-
-    Pool --> Connection : Manages multiple
-    Connection --> Session : Executes on
-    Pool --> Session : Executes via use
-    Session --> Transaction : Executes
-    Session --> Statement : Executes
-    Session --> Pipeline : Executes
-    Transaction --> Statement : Executes
-    Pipeline --> Statement : Batches multiple
-    Statement --> Encoders : Contains for params
-    Statement --> Decoders : Contains for results
+    Pool -->|manages| Connection
+    Pool -->|runs via use| Session
+    Connection -->|runs| Session
+    Session -->|executes| Transaction
+    Session -->|executes| Statement
+    Session -->|executes| Pipeline
+    Transaction -->|executes| Statement
+    Pipeline -->|batches| Statement
+    Statement -->|encodes params with| Encoders
+    Statement -->|decodes results with| Decoders
 ```
