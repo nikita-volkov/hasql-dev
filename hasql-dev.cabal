@@ -83,9 +83,9 @@ library
   build-depends:
     base >=4.11 && <5,
     bytestring >=0.10 && <0.14,
-    hasql ^>=1.10.1,
-    hasql-mapping,
-    hasql-pool ^>=1.4,
-    hasql-transaction ^>=1.2.0.1,
+    hasql ^>=2.0,
+    hasql-mapping ^>=0.1.0.2,
+    hasql-pool ^>=1.5,
+    hasql-transaction ^>=1.2.2.1,
     text >=1.2 && <3,
     transformers >=0.5 && <0.7,
